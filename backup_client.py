@@ -1,4 +1,6 @@
 import concurrent.futures
+import math
+import os
 import pathlib
 import platform
 from tkinter import *
@@ -36,9 +38,27 @@ def non_blocking_executor_shutdown(executor: concurrent.futures.Executor, future
 		return
 	root.after(10, non_blocking_executor_shutdown, executor, future)
 
-# TODO: get file and directory sizes
-def get_size(path: pathlib.Path) -> str:
-	return ""
+def __get_size__(path: pathlib.Path):
+	if path.is_dir():
+		return sum(f.stat().st_size for f in path.glob('**/*') if f.is_file())
+	return path.stat().st_size
+
+def get_size(path: pathlib.Path, unit: Literal["B", "iB"]="B"):
+	base = 1000 if unit == "B" else 1024
+	prefixes = "kMGTPEZ"
+	size = __get_size__(path)
+	if size == 0:
+		return "0 B"
+	
+	power = int(math.log(size, base))
+	prefix = prefixes[power-1]
+	if power == 0:
+		return f"{size} B"
+	
+	prefixed_size = round(size/(base**power), 1)
+
+	return f"{prefixed_size} {prefix}{unit}"
+
 
 # Function that converts window paths to POSIX paths that are readable by rsync
 def win_to_rsync_readable_posix(path: pathlib.Path) -> str:
@@ -68,7 +88,7 @@ class ClientWindow:
 
 
 """
-This does not come with ScrollBars do it yourself
+This does not come with ScrollBars please do it yourself
 """
 class DirectoryView:
 	def __init__(self, parent: Misc | None = None):
@@ -118,7 +138,10 @@ class DirectoryView:
 		root_dir = pathlib.Path(sys.executable).anchor
 		if platform.system() == "Windows":
 			root_dir = root_dir[:2].upper()
-		self.view.insert("", iid=root_dir, index=0, text=root_dir, values=(get_size(pathlib.Path(root_dir)), "\u2610"))
+		self.view.insert(
+			"", iid=root_dir, index=0, text=root_dir,
+			values=("", "\u2610")
+		)
 		root.after(1, self.__populate__, 0)
 
 	def __populate__(self, index):
@@ -152,14 +175,17 @@ class DirectoryView:
 		else:
 			self.__add_item__(path, "file", selected)
 
-	# TODO: Add folder icons for directories and file icons for files
 	def __add_item__(self, path: pathlib.Path, type: Literal["dir", "file"], selected: bool=False):
 		checkbox = "\u2611" if selected else "\u2610"
+		size = get_size(path) if selected else ""
 		posix_path = path.as_posix()
 		path_segments = posix_path.split(sep="/")
 
 		parent_iid = "/".join(path_segments[:-1])
-		self.view.insert(parent_iid, iid=posix_path, index="end", text=path_segments[-1], values=[get_size(path), checkbox])
+		self.view.insert(
+			parent_iid, iid=posix_path, index="end", text=path_segments[-1],
+			values=(size, checkbox)
+		)
 
 		if not selected or type == "file":
 			return
@@ -179,6 +205,7 @@ class DirectoryView:
 			if self.view.exists(f"{dirpath}{path_sep}{filename}"):
 				continue
 			root.after(100, self.add_item, pathlib.Path(f"{dirpath}{path_sep}{filename}"), True)
+		return
 
 class BackupWindow:
 	def __init__(self):
