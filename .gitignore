@@ -1,3 +1,9 @@
+# Funny unoptimised versions that explode my PC
+unoptimised
+
+# Files related to testing and experimenting
+test
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
