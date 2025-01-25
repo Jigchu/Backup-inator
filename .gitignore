@@ -1,3 +1,7 @@
+# Anything conifugration and settings related
+settings
+*.conf
+
 # Funny unoptimised versions that explode my PC
 unoptimised
 
