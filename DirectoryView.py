@@ -1,7 +1,9 @@
+import math
 import pathlib
 import platform
 from tkinter import *
-from tkinter import ttk
+from tkinter import ttk, messagebox
+from typing import Literal
 
 class DirectoryView:
 	"""
@@ -17,7 +19,8 @@ class DirectoryView:
 	DISCLAIMER: This class does not come with ScrollBars, you have to implement
 	that yourself
 	"""
-	def __init__(self, parent: Misc | None = None):
+	def __init__(self, parent):
+		self.parent = parent
 		self.directories = []
 
 		info_columns = ("Size", "Selected")	# TODO: Size will be implemented later also may add date
@@ -35,7 +38,7 @@ class DirectoryView:
 
 	def populate(self):
 		if self.directories == []:
-			self.view.after(10, self.populate)
+			self.parent.after(10, self.populate)
 			return
 		
 		# Check if either the connection timed out or is refused
@@ -60,7 +63,7 @@ class DirectoryView:
 			)
 			return
 		
-		root.after(1, self.__populate__, 0)
+		self.parent.after(1, self.__populate__, 0)
 
 	def __populate__(self, index):
 		try:
@@ -72,7 +75,7 @@ class DirectoryView:
 
 		if not path.exists():
 			self.directories.remove(directory)
-			root.after(10, self.__populate__, index)
+			self.parent.after(10, self.__populate__, index)
 			return
 	
 		# Add base node with children if directory
@@ -83,7 +86,7 @@ class DirectoryView:
 				message="What did you give me? How is {path} somehow not a file or directory? I'm confused"
 			)
 
-		root.after(10, self.__populate__, index+1)
+		self.parent.after(10, self.__populate__, index+1)
 	
 	def add_item(self, path: pathlib.Path, base: bool=False):
 		text = str(path) if base else path.name
@@ -104,10 +107,35 @@ class DirectoryView:
 		children = dirnames + filenames
 		for child in children:
 			child_p = pathlib.Path(f"{dirpath}{path_sep}{child}")
-			root.after(10, self.add_item, child_p)
+			self.parent.after(10, self.add_item, child_p)
 
 		return
 
 	# Wrapper for get_size but may be used for optimisations later
 	def update_size(self, path: pathlib.Path, unit: Literal["iB", "B"]="B"):
-		return get_size(path, unit)
+		return self.get_size(path, unit)
+	
+	def __get_size__(self, path: pathlib.Path):
+		if path.is_dir():
+			return sum(f.stat().st_size for f in path.glob('**/*') if f.is_file())
+		elif path.is_file():
+			return path.stat().st_size
+		return -1
+
+	def get_size(self, path: pathlib.Path, unit: Literal["B", "iB"]="B"):
+		base = 1000 if unit == "B" else 1024
+		prefixes = "kMGTPEZ"
+		size = self.__get_size__(path)
+		if size == 0:
+			return "0 B"
+		elif size < 0:
+			return "N/A"
+		
+		power = int(math.log(size, base))
+		prefix = prefixes[power-1]
+		if power == 0:
+			return f"{size} B"
+		
+		prefixed_size = round(size/(base**power), 1)
+
+		return f"{prefixed_size} {prefix}{unit}"

@@ -13,15 +13,12 @@ def read_backup_conf():
 	return backup_dir
 
 def main(LOCAL: bool):
-	HOST, port = socket.gethostname(), 9999
-	if LOCAL:
-		HOST = f"{HOST}.local"
-
+	port = 9999
 	server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	if platform.system() != "Windows":
 		server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 	
-	server.bind((HOST, port))
+	server.bind(("", port))
 	server.listen(1)	# TODO: Change when I add silmultaneous connections
 
 	while True:
