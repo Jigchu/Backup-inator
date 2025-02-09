@@ -1,12 +1,12 @@
 # Anything conifugration and settings related
-settings
+*.json
 *.conf
 
 # Funny unoptimised versions that explode my PC
 unoptimised
 
 # Files related to testing and experimenting
-test
+test.*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

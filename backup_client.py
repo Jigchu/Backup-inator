@@ -1,4 +1,5 @@
 import concurrent.futures
+import json
 import math
 import pathlib
 import platform
@@ -9,6 +10,8 @@ import socket_io as sio
 import socket
 
 TIMEOUT_LENGTH = 300
+settings_file = open("settings.json", mode="w+")
+settings = json.load(settings_file)
 HOST: str = None
 port: int = None
 root = Tk()
