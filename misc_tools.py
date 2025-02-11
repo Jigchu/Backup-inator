@@ -12,7 +12,7 @@ def non_blocking_executor_shutdown(widget: Widget | Tk, executor: concurrent.fut
 	if future.done():
 		executor.shutdown()
 		return
-	widget.after(10, non_blocking_executor_shutdown, executor, future)
+	widget.after(10, non_blocking_executor_shutdown, widget, executor, future)
 
 # Function that converts window paths to POSIX paths that are readable by rsync
 def win_to_rsync_readable_posix(path: pathlib.Path) -> str:

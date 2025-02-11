@@ -60,10 +60,9 @@ class BackupWindow:
 	def get_backup_conf(self, HOST: str, port: int, out: list[str]):
 		try:
 			client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-			client.settimeout(globals.settings["TimeoutLength"] or 300)
+			client.settimeout(globals.settings.get("TimeoutLength") or 300) # TODO: Preset timoutlength setting when not present
 			try:
 				client.connect((HOST, port))
-				print(HOST, port)
 			except ConnectionRefusedError:
 				out.append("ConnectionRefusedError")
 				return
@@ -93,7 +92,6 @@ class BackupWindow:
 
 		if dir == "":
 			return
-		self.dir_view.directories.append(dir)
 		self.dir_view.add_item(pathlib.Path(dir), base=True)
 
 	def add_file(self):
@@ -104,7 +102,6 @@ class BackupWindow:
 
 		if filename == "":
 			return
-		self.dir_view.directories.append(filename)
 		self.dir_view.add_item(pathlib.Path(filename), base=True)
 
 	def remove_item(self):

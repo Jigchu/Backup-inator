@@ -12,7 +12,7 @@ def read_backup_conf():
 
 	return backup_dir
 
-def main(LOCAL: bool):
+def main():
 	port = 9999
 	server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	if platform.system() != "Windows":
@@ -35,4 +35,4 @@ def main(LOCAL: bool):
 	return
 
 if __name__ == "__main__":
-	main(LOCAL=True)
+	main()

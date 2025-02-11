@@ -89,9 +89,15 @@ class DirectoryView:
 		self.parent.after(10, self.__populate__, index+1)
 	
 	def add_item(self, path: pathlib.Path, base: bool=False):
+		posixed_path = path.as_posix()
+		if self.view.exists(posixed_path):
+			return
+
+		if posixed_path not in self.directories:
+			self.directories.append(posixed_path)
 		text = str(path) if base else path.name
 		parent = "" if base else path.parent.as_posix()
-		self.view.insert(parent, iid=path.as_posix(), index="end", text=text, values=(self.update_size(path), "\u2611"))
+		self.view.insert(parent, iid=posixed_path, index="end", text=text, values=(self.update_size(path), "\u2611"))
 
 		if path.is_dir():
 			self.__add_children__(path)
