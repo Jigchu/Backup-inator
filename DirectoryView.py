@@ -93,7 +93,7 @@ class DirectoryView:
 		if self.view.exists(posixed_path):
 			return
 
-		if posixed_path not in self.directories:
+		if base and posixed_path not in self.directories:
 			self.directories.append(posixed_path)
 		text = str(path) if base else path.name
 		parent = "" if base else path.parent.as_posix()
