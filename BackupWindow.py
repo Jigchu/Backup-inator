@@ -108,10 +108,10 @@ class BackupWindow:
 		raise NotImplementedError
 
 	def select_all(self):
-		raise NotImplementedError
+		self.dir_view.select("")
 
 	def deselect_all(self):
-		raise NotImplementedError
+		self.dir_view.deselect("")
 
 	def backup(self):
 		raise NotImplementedError
