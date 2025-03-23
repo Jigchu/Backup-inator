@@ -9,6 +9,12 @@ settings: dict = {}
 HOST: str = ""
 port: int = -1
 
+# TODO: Puts these into settings.json
+UPDATE_INTERVAL = 5.0
+SSH_PORT = 22
+TIMEOUT_LENGTH = 300
+SERVER_USER = "user"
+
 def load():
 	global settings, HOST, port
 	# TODO: Preset timoutlength setting when not present

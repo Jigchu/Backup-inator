@@ -1,9 +1,10 @@
-import math
 import pathlib
 import platform
 from tkinter import *
 from tkinter import ttk, messagebox
 from typing import Literal
+
+import misc_tools as tools
 
 class DirectoryView:
 	"""
@@ -43,13 +44,15 @@ class DirectoryView:
 
 	def __init__(self, parent):
 		self.parent = parent
+		self.last_selection = ()
 		self.directories: list[str] = []
-		
 		self.deselected: set[str] = set()
+		self.removed: set[str] = set()
 		"""
 		UUID will be in self.deselected if:
 		- It is a deselected file 
 		- It is a directory in which all children are also deselected
+		- It has been removed using the "Remove" button
 
 		Where children of directories in self.deselected will not be
 		in self.deselected
@@ -67,94 +70,94 @@ class DirectoryView:
 		for index, column in enumerate(self.INFO_COLUMNS):
 			self.view.heading(f"#{index}", text=column)
 		
-		self.view.bind("<Button-1>", func=self.binding)
+		self.view.bind("<Button-1>", func=(
+				lambda e: 
+				self.select_binding(self.view.identify_row(e.y))
+				if self.get_column(e) == "Selected" 
+				else None
+			)
+		)
 
-	def binding(self, event: Event):
-		uuid = self.view.identify_row(event.y)
-		column = self.view.identify_column(event.x)
-		if column == "":
-			return
-		column = int(column[1:])
+		self.view.bind("<<TreeviewSelect>>", func=self.update_last_selection)
 
-		if self.INFO_COLUMNS[column] == "Selected":
-			self.select_binding(uuid)
+	def update_last_selection(self, e):
+		self.last_selection = self.view.selection()
 
 	def select_binding(self, uuid: str):
-		curr_selection = (
-			self.view.item(uuid, option="values")
-			[self.INFO_COLUMNS.index("Selected")-1]
-		)
-		
-		if curr_selection == self.SELECTED:
-			self.deselect(uuid)
-		else:
-			self.select(uuid)
+		self.deselect(uuid) if self.get_current_selection(uuid) == self.SELECTED else self.select(uuid)
+
+	def get_column(self, e: Event):
+		return self.INFO_COLUMNS[int(self.view.identify_column(e.x)[1:])]
 
 	def populate(self):
 		if self.directories == []:
 			self.parent.after(10, self.populate)
 			return
 		
-		# Check if either the connection timed out or is refused
-		if "ConnectionRefusedError" in self.directories:
-			messagebox.showerror(
-				title="Connection Refused", 
-				message="Please check if the server you are connecting to is online"
-			)
-			return
-		if "Connection Timed Out" in self.directories:
-			messagebox.showerror(
-				title="Connection Timed Out", 
-				message="Please check if your internet has a stable connection"
-			)
+		if self.directories == None:
 			return
 
-		# Check is there are no directories
-		if "None" in self.directories:
-			messagebox.showerror(
-				title="No Directories",
-				message="There are no directories, please check your server."
-			)
-			return
-		
 		self.parent.after(1, self.__populate__, 0)
 
-		
 	def add_item(self, path: pathlib.Path, base: bool=False):
 		posixed_path = path.as_posix()
 		if self.view.exists(posixed_path):
 			return
 
+		try:
+			self.removed.remove(posixed_path)
+		except KeyError:
+			pass
+
 		if base and posixed_path not in self.directories:
 			self.directories.append(posixed_path)
 		text = str(path) if base else path.name
 		parent = "" if base else path.parent.as_posix()
-		self.view.insert(parent, iid=posixed_path, index="end", text=text, values=(self.update_size(path), self.SELECTED))
+		self.view.insert(parent, iid=posixed_path, index="end", text=text, values=(self.update_size(path, unit="B"), self.SELECTED))
 
 		if path.is_dir():
 			self.__add_children__(path)
 
+	def remove_item(self, uuid: str):
+		if uuid == "":
+			self.deselected.clear()
+			return
+		
+		parent = self.view.parent(uuid)
+		self.view.delete(uuid)
+		self.removed.add(uuid)
+
+		if uuid in self.directories:
+			self.directories.remove(uuid)
+			self.removed.remove(uuid)
+		
+		try:
+			self.deselected.remove(uuid)
+		except KeyError:
+			return
+		
+		# Remove Children
+		self.deselected = set([i for i in self.deselected if uuid not in i])
+		self.removed = set([i for i in self.removed if uuid not in i])
+
+		if self.get_all_children(parent) == []:
+			if parent == "":
+				self.directories = []
+				self.removed = set()
+				self.deselected = set()
+				return
+			self.deselected = set([i for i in self.deselected if parent not in i])
+			self.removed = set([i for i in self.removed if parent not in i])
+
+		self.__edit_parent_selection__(parent)
+		return
+
 	# Wrapper for get_size but may be used for optimisations later
-	def update_size(self, path: pathlib.Path, unit: Literal["iB", "B"]="B"):
+	def update_size(self, path: pathlib.Path, unit: Literal["iB", "B"]):
 		return self.get_size(path, unit)
 
-	def get_size(self, path: pathlib.Path, unit: Literal["B", "iB"]="B"):
-		base = 1000 if unit == "B" else 1024
-		prefixes = "kMGTPEZ"
-		size = self.__get_size__(path)
-		if size == 0:
-			return "0 B"
-		elif size < 0:
-			return "N/A"
-		
-		power = int(math.log(size, base))
-		prefix = prefixes[power-1]
-		if power == 0:
-			return f"{size} B"
-		
-		prefixed_size = round(size/(base**power), 1)
-
-		return f"{prefixed_size} {prefix}{unit}"
+	def get_size(self, path: pathlib.Path, unit: Literal["B", "iB"]):
+		return tools.human_readable_file_size(tools.size_of(path), unit)
 	
 	def remove_from_deselect(self, uuid):
 		try:
@@ -165,10 +168,12 @@ class DirectoryView:
 	def select(self, uuid: str):
 		self.__edit_selection__(uuid, select=True)
 		self.remove_from_deselect(uuid)
+		self.view.event_generate("<<DeselectedUpdate>>")
 	
 	def deselect(self, uuid: str):
 		self.__edit_selection__(uuid, select=False)
 		self.deselected.add(uuid)
+		self.view.event_generate("<<DeselectedUpdate>>")
 
 	def __edit_selection__(self, uuid: str, select: bool):
 		new_symbol = self.SELECTED if select else self.NOT_SELECTED
@@ -193,7 +198,7 @@ class DirectoryView:
 		self.view.set(uuid, column="Selected", value=new_selection)
 
 		if original_selection == new_selection or uuid == "":
-			self.view.after(10, self.compute_deselected, uuid)
+			self.view.after(10, self.__compute_deselected__, "")
 		else:
 			self.view.after(
 				10, self.__edit_parent_selection__, 
@@ -202,22 +207,14 @@ class DirectoryView:
 
 		return
 
-	def compute_deselected(self, root: str):
-		# Escalate to top level where selected == self.NOT_SELECTED
-		parent_id = self.view.parent(root)
-		if root != "" and self.get_current_selection(parent_id) == self.NOT_SELECTED:
-			self.view.after(10, self.compute_deselected, parent_id)
-			return
-
-		self.__compute_deselected__(root)
-		
-		return
-
 	def __compute_deselected__(self, root: str):
-		if self.get_current_selection(root) == self.SELECTED:
-			return
-
 		children: list = list(self.get_all_children(root))
+		
+		if self.get_current_selection(root) == self.SELECTED:
+			self.remove_from_deselect(root)
+			self.deselected = self.deselected.difference(children)
+			return
+		
 		all_deselected = all (
 			map (
 				lambda c: self.get_current_selection(c) == self.NOT_SELECTED,
@@ -293,10 +290,3 @@ class DirectoryView:
 			self.parent.after(10, self.add_item, child_p)
 
 		return
-	
-	def __get_size__(self, path: pathlib.Path):
-		if path.is_dir():
-			return sum(f.stat().st_size for f in path.glob('**/*') if f.is_file())
-		elif path.is_file():
-			return path.stat().st_size
-		return -1

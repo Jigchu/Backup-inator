@@ -3,10 +3,14 @@ All recieve and send functions use utf-8 encoding
 Default delimiting character is \0
 Prefixed Length is in Base-16 and is limited to one letter 
 The max length of a prefixed message is 15 characters
+Due to the Global Variable of PREV_CHUNK, all socket IO using
+delimited messages are not thread-safe
 """
 
 import socket
 from typing import Literal
+
+PREV_CHUNK = b""	#TODO: make this thread-safe
 
 def send(sock: socket.socket, msg: str, type: Literal["delim", "prefix", None]=None):
 	msg = msg.encode("utf-8")
@@ -43,15 +47,17 @@ def recv(sock: socket.socket, bufsize: int):
 
 # A recieve function that uses delimiters to indicate end of message
 def recv_delim(sock: socket.socket):
-	msg_chunks = []
+	global PREV_CHUNK
+	msg_chunks = [PREV_CHUNK]
 	delim = False
 	while not delim:
 		chunk = sock.recv(4096)
 		if chunk == b"":
-			return ""
+			break
 		for index, letter in enumerate(chunk):
 			if letter == 0:
 				delim = True
+				PREV_CHUNK = chunk[index+1:]
 				chunk = chunk[:index]
 				break
 		msg_chunks.append(chunk)

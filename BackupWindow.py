@@ -1,17 +1,23 @@
 import concurrent.futures
+import datetime
+import json
 import platform
 import pathlib
-from tkinter import *
-from tkinter import ttk, filedialog
+import shutil
 import socket
+from tkinter import *
+from tkinter import ttk, filedialog, messagebox
+from typing import Generator
 
 import runtime_globals as globals
 import misc_tools as tools
 import socket_io as sio
 from DirectoryView import DirectoryView
+from RsyncTracker import RsyncTracker
 
 class BackupWindow:
 	def __init__(self, parent):
+		self.last_modified = ""
 		self.mainframe = ttk.Frame(parent, padding="5 10")
 		self.mainframe.grid(column=0, row=0, sticky=(N, S, E, W))
 
@@ -52,29 +58,118 @@ class BackupWindow:
 		self.mainframe.columnconfigure(index=2, weight=1)
 		self.mainframe.rowconfigure(index=5, weight=1)
 
+		# Creating Bindings
+		self.dir_view.view.bind("<<DeselectedUpdate>>", lambda _: self.save_backup_conf())
+
+		# Populate dir_view with backup directories
 		executor = concurrent.futures.ThreadPoolExecutor()
-		future = executor.submit(self.get_backup_conf, globals.HOST, globals.port, self.dir_view.directories)
-		self.dir_view.view.after(500, tools.non_blocking_executor_shutdown, self.mainframe, executor, future)
+		future = executor.submit(self.load_backup_conf)
+		self.mainframe.after(500, tools.non_blocking_executor_shutdown, self.mainframe, executor, future)
 		self.dir_view.view.after(100, self.dir_view.populate)
 
-	def get_backup_conf(self, HOST: str, port: int, out: list[str]):
-		try:
-			client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-			client.settimeout(globals.settings.get("TimeoutLength") or 300) # TODO: Preset timoutlength setting when not present
-			try:
-				client.connect((HOST, port))
-			except ConnectionRefusedError:
-				out.append("ConnectionRefusedError")
-				return
-				
-			sio.send(client, "ReqBC")
-			out.extend(sio.recv_delim(client).split(sep="\n"))
-			sio.send(client, "0")
-			client.close()
-		except socket.timeout:
-			out.append("Connection Timed Out")
+		# Kickstart the backup.json autoupdater
+		self.mainframe.after(10, self.update_remote_backup_conf, globals.UPDATE_INTERVAL, datetime.datetime.now())
 
-	# TODO: Make sure it updates the server about these changes and also make sure not to add files that are already present
+	def load_backup_conf(self):
+		remote_backup_conf = self.get_remote_backup_conf()
+		local_backup_conf = self.get_local_backup_conf()
+
+		remote_last_modified = remote_backup_conf.get("LastModified") or ""
+		local_last_modified = local_backup_conf.get("LastModified")
+
+		backup_conf = (
+			local_backup_conf 
+			if local_last_modified >= remote_last_modified
+			else remote_backup_conf
+		)
+
+		self.last_modified = backup_conf.get("LastModified") or ""
+		self.dir_view.directories = backup_conf.get("BackupDirectories")
+		self.dir_view.deselected = set(backup_conf.get("DeselectedDirectories")) or set()
+		self.dir_view.removed = set(backup_conf.get("RemovedDirectories")) or set()
+	
+	def get_remote_backup_conf(self):
+		client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		client.settimeout(globals.TIMEOUT_LENGTH)
+		client.connect((globals.HOST, globals.port))
+		sio.send(client, "RequestBackupConf", type="delim")
+		backup_conf_string = sio.recv_delim(client)
+		client.shutdown(socket.SHUT_RDWR)
+		client.close()
+
+		if backup_conf_string == "":
+			return {}
+
+		return json.loads(backup_conf_string)
+
+	def get_local_backup_conf(self):
+		try:
+			backup_json = open("backup.json")
+		except FileNotFoundError:
+			backup_json = open("backup.json", mode="x")
+		finally:
+			backup_json.close()
+
+		backup_json = open("backup.json")
+		try:
+			backup_conf: dict = json.load(backup_json)
+		except json.JSONDecodeError:
+			backup_conf = {}
+
+		return backup_conf
+
+	def save_backup_conf(self):
+		self.last_modified = datetime.datetime.now(datetime.timezone.utc)
+		self.last_modified = tools.datetime_to_ISO8601(self.last_modified)
+		json_contents = {}
+
+		json_contents["LastModified"] = self.last_modified
+		json_contents["BackupDirectories"] = self.dir_view.directories
+		json_contents["DeselectedDirectories"] = list(self.dir_view.deselected)
+		json_contents["RemovedDirectories"] = list(self.dir_view.removed)
+		
+		with open("backup.json", mode="w") as backup_json:
+			json.dump(json_contents, backup_json)
+
+		return
+
+	# Interval is in minutes
+	def update_remote_backup_conf(self, INTERVAL: float, last_update_time: datetime.datetime):
+		now = datetime.datetime.now()
+		time_since_last_update = now - last_update_time
+		if time_since_last_update < datetime.timedelta(minutes=INTERVAL):
+			self.mainframe.after(10, self.update_remote_backup_conf, INTERVAL, last_update_time)
+			return
+
+		executor = concurrent.futures.ThreadPoolExecutor()
+		future = executor.submit(self.send_backup_conf)
+		self.mainframe.after(10, tools.non_blocking_executor_shutdown, self.mainframe, executor, future)
+
+		# If updated start another countdown but with the current time as the last updated time
+		self.mainframe.after(10, self.update_remote_backup_conf, INTERVAL, now)
+
+		return
+
+	def send_backup_conf(self):
+		json_contents = {}
+		json_contents["LastModified"] = self.last_modified
+		json_contents["BackupDirectories"] = self.dir_view.directories
+		json_contents["DeselectedDirectories"] = list(self.dir_view.deselected)
+		json_contents["RemovedDirectories"] = list(self.dir_view.removed)
+
+		json_string = json.dumps(json_contents)
+
+		client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		client.settimeout(globals.TIMEOUT_LENGTH)
+		client.connect((globals.HOST, globals.port))
+		sio.send(client, "UpdateBackupConf", type="delim")
+		sio.send(client, json_string, type="delim")
+		client.shutdown(socket.SHUT_RDWR)
+		client.close()
+
+		return
+
+	# TODO: Make sure it updates the server about these changes
 	def add_dir(self):
 		"""
 		The reason why the title of dialogs can use platform specific terminology
@@ -93,6 +188,7 @@ class BackupWindow:
 		if dir == "":
 			return
 		self.dir_view.add_item(pathlib.Path(dir), base=True)
+		self.save_backup_conf()
 
 	def add_file(self):
 		filename = filedialog.askopenfilename(
@@ -103,9 +199,13 @@ class BackupWindow:
 		if filename == "":
 			return
 		self.dir_view.add_item(pathlib.Path(filename), base=True)
+		self.save_backup_conf()
 
 	def remove_item(self):
-		raise NotImplementedError
+		selected_items = self.dir_view.last_selection
+		for item in selected_items:
+			self.dir_view.remove_item(item)
+		self.save_backup_conf()
 
 	def select_all(self):
 		self.dir_view.select("")
@@ -114,4 +214,88 @@ class BackupWindow:
 		self.dir_view.deselect("")
 
 	def backup(self):
-		raise NotImplementedError
+		include_file = self.__create_files_from_file__()
+		exclude_file = self.__create_exclude_file__()
+		
+		if platform.system() == "Windows":
+			include_file = tools.win_to_rsync_readable_posix(include_file)
+			exclude_file = tools.win_to_rsync_readable_posix(exclude_file)
+		
+		rsync_path = shutil.which("rsync")
+		rsync_user = globals.SERVER_USER
+		
+		out_format = "| %f | %b"
+		ssh_command = f"ssh -p {globals.SSH_PORT}"
+		rsync_command = [
+			rsync_path, "-e", ssh_command, "--archive", "--recursive", "--no-relative", "--compress",
+			"--partial", f"--exclude-from={exclude_file}", f"--files-from={include_file}",
+			f'--out-format={out_format}', "/", f"{rsync_user}@{globals.HOST}:~/Backup/"
+		]
+
+		# Remove later
+		DEBUG = False
+		if DEBUG:
+			rsync_command.insert(4, "--dry-run")
+		
+		total_to_backup = self.total_files_to_backup()
+		rsync_progress = RsyncTracker(
+			self.mainframe, rsync_command=rsync_command, total_to_backup=total_to_backup
+		)
+
+		rsync_progress.window.bind("<<RsyncCompleted>>", lambda e: self.end_backup(e))
+	
+	def end_backup(self, e: Event):
+		pathlib.Path("ExcludeFrom.tmp").resolve().unlink()
+		pathlib.Path("FilesFrom.tmp").resolve().unlink()
+		e.widget.destroy()
+		
+		return
+
+	def __create_files_from_file__(self):
+		include_dirs = self.dir_view.directories.copy()
+
+		if platform.system() == "Windows":
+			include_dirs = list(map(tools.win_to_rsync_readable_posix, map(pathlib.Path, include_dirs)))
+
+		file_contents = "\n".join(include_dirs)
+		with open("FilesFrom.tmp", mode="w") as include_file:
+			if include_file.write(file_contents) != len(file_contents):
+				messagebox.showwarning(
+					title="Write Error",
+					message="Could not fully write the contents of FilesFrom.tmp"
+				)
+
+		return pathlib.Path("FilesFrom.tmp").resolve()
+	
+	def __create_exclude_file__(self):
+		exclude_dirs = []
+		exclude_dirs.extend(self.dir_view.deselected.copy())
+		exclude_dirs.extend(self.dir_view.removed.copy())
+
+		if platform.system() == "Windows":
+			exclude_dirs = list(map(tools.win_to_rsync_readable_posix, map(pathlib.Path, exclude_dirs)))
+		
+		file_contents = "\n".join(exclude_dirs)
+		with open("ExcludeFrom.tmp", mode="w") as exclude_file:
+			if exclude_file.write(file_contents) != len(file_contents):
+				messagebox.showwarning(
+					title="Write Error",
+					message="Could not fully write the contents of ExcludeFrom.tmp"
+				)
+
+		return pathlib.Path("ExcludeFrom.tmp").resolve()
+	
+	def total_files_to_backup(self):
+		total_include = map(pathlib.Path, self.dir_view.directories)
+		total_include = sum(
+			map(tools.how_many_files_in, total_include)
+		)
+
+		total_exclude = list(self.dir_view.removed)
+		total_exclude.extend(self.dir_view.deselected)
+		total_exclude = map(pathlib.Path, total_exclude)
+		total_exclude = sum(
+			map(tools.how_many_files_in, total_exclude)
+		)
+
+		return total_include - total_exclude

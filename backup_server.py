@@ -1,16 +1,7 @@
+import json
 import platform
 import socket_io as sio
 import socket
-
-def read_backup_conf():
-	backup_dir = ["None"]
-	try:
-		with open("backup.conf") as backup_conf:
-			backup_dir = [line.strip() for line in backup_conf]
-	except FileNotFoundError:
-		pass
-
-	return backup_dir
 
 def main():
 	port = 9999
@@ -23,15 +14,41 @@ def main():
 
 	while True:
 		client, client_address = server.accept()
-		command = sio.recv(client, 5)
+		command = sio.recv_delim(client)
 
 		match command:
-			case "ReqBC":
-				backup_dir = read_backup_conf()
-				sio.send(client, "\n".join(backup_dir), type="delim")
-				client.recv(1).decode("utf-8")
-				client.close()
+			case "RequestBackupConf":
+				msg = load_backup_conf()
+				sio.send(client, msg, type="delim")
+			case "UpdateBackupConf":
+				update_backup_conf(client)
+		
+		client.shutdown(socket.SHUT_RDWR)
+		client.close()
 
+	return
+
+def load_backup_conf():
+	try:
+		backup_json = open("backup.json")
+	except FileNotFoundError:
+		backup_json = open("backup.json", mode="x")
+	finally:
+		backup_json.close()
+
+	backup_conf = ""
+	with open("backup.json") as backup_json:
+		backup_conf = "".join([line for line in backup_json])
+
+	return backup_conf
+
+def update_backup_conf(client: socket.socket):
+	json_string = sio.recv_delim(client)
+	backup_conf = json.loads(json_string)
+
+	with open("backup.json", mode="w") as backup_json:
+		json.dump(backup_conf, backup_json)
+	
 	return
 
 if __name__ == "__main__":

@@ -1,3 +1,6 @@
+# Temporary Files
+*.tmp
+
 # Anything conifugration and settings related
 *.json
 *.conf
