@@ -3,11 +3,9 @@ import concurrent.futures
 import datetime
 import pathlib
 import platform
-import signal
 import subprocess
 from tkinter import *
 from tkinter import ttk, messagebox
-from typing import Generator
 
 import misc_tools as tools
 import runtime_globals as globals

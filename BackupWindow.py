@@ -7,7 +7,6 @@ import shutil
 import socket
 from tkinter import *
 from tkinter import ttk, filedialog, messagebox
-from typing import Generator
 
 import runtime_globals as globals
 import misc_tools as tools
@@ -21,44 +20,31 @@ class BackupWindow:
 		self.mainframe = ttk.Frame(parent, padding="5 10")
 		self.mainframe.grid(column=0, row=0, sticky=(N, S, E, W))
 
-		# TODO: May make dir view and scroll bars in their own frame
 		self.dir_view = DirectoryView(self.mainframe)
-		self.dir_view.view.grid(column=0, row=0, columnspan=4, rowspan=6, sticky=(N, S, E, W), padx=5, pady=3)
+		self.dir_view.view.grid(column=0, row=0, columnspan=2, rowspan=6, sticky=(N, S, E, W), padx=5, pady=3)
 
-
-		# Setting Scrollbars
-		vert_scroll = ttk.Scrollbar(self.mainframe, orient="vertical", command=self.dir_view.view.yview)
-		hori_scroll = ttk.Scrollbar(self.mainframe, orient="horizontal", command=self.dir_view.view.xview)
-		self.dir_view.view.configure(yscrollcommand=vert_scroll.set, xscrollcommand=hori_scroll.set)
-		vert_scroll.grid(column=4, row=0, rowspan=6, sticky=(N, S, W), padx=(0, 10))
-		hori_scroll.grid(column=0, row=6, columnspan=4, sticky=(W, E, N), pady=(0, 10))
-
-		# Setting up Buttons
 		add_button = ttk.Button(self.mainframe, text="Add Folder", command=self.add_dir)
-		add_button.grid(column=5, row=0, sticky=(N, E), padx=5, pady=(5, 3))
+		add_button.grid(column=2, row=0, sticky=(N, E), padx=5, pady=(5, 3))
 
 		add_button = ttk.Button(self.mainframe, text="Add File", command=self.add_file)
-		add_button.grid(column=5, row=1, sticky=(N, E), padx=5, pady=(5, 3))
+		add_button.grid(column=2, row=1, sticky=(N, E), padx=5, pady=(5, 3))
 
 		remove_button = ttk.Button(self.mainframe, text="Remove", command=self.remove_item)
-		remove_button.grid(column=5, row=2, sticky=(N, E), padx=5, pady=3)
+		remove_button.grid(column=2, row=2, sticky=(N, E), padx=5, pady=3)
 
 		select_button = ttk.Button(self.mainframe, text="Select All", command=self.select_all)
-		select_button.grid(column=5, row=3, sticky=(N, E), padx=5, pady=3)
+		select_button.grid(column=2, row=3, sticky=(N, E), padx=5, pady=3)
 
 		deselect_button = ttk.Button(self.mainframe, text="Deselect All", command=self.deselect_all)
-		deselect_button.grid(column=5, row=4, sticky=(N, E), padx=5, pady=3)
+		deselect_button.grid(column=2, row=4, sticky=(N, E), padx=5, pady=3)
 
 		backup_button = ttk.Button(self.mainframe, text="Backup", command=self.backup)
-		backup_button.grid(column=3, row=7, sticky=(N, W, E), padx=5, pady=(3, 5))
+		backup_button.grid(column=1, row=6, sticky=(N, W, E), padx=5, pady=(3, 5))
 
 		# Setting up the treeview's fit to window
-		self.mainframe.columnconfigure(index=0, weight=1)
-		self.mainframe.columnconfigure(index=1, weight=1)
-		self.mainframe.columnconfigure(index=2, weight=1)
-		self.mainframe.rowconfigure(index=5, weight=1)
+		self.mainframe.columnconfigure(0, weight=1)
+		self.mainframe.rowconfigure(5, weight=1)
 
-		# Creating Bindings
 		self.dir_view.view.bind("<<DeselectedUpdate>>", lambda _: self.save_backup_conf())
 
 		# Populate dir_view with backup directories

@@ -8,17 +8,9 @@ import misc_tools as tools
 
 class DirectoryView:
 	"""
-	Although the class is called "Directory View", it is fully capable of
-	displaying files. Though admittedly, that is not what it was originally
-	designed for but knowing there will be definitely be people who want to
-	just back up one file in a whole directory, I have decided to add that
-	functionality. Therefore, anything with the a name containing the word
-	directory and all its other derivatives are also able to work with paths
-	to files except for its methods. Methods meant to handle both files and
-	directories use the word item due to a lack of a better word.
-
-	DISCLAIMER: This class does not come with ScrollBars, you have to implement
-	that yourself
+	DISCLAIMER:
+	1. "Directories" can refer to files not just directories
+	2. "Folder" refers to Directories
 	"""
 
 	NOT_SELECTED = "\u2610"
@@ -58,50 +50,61 @@ class DirectoryView:
 		in self.deselected
 		"""
 
-		self.view = ttk.Treeview(parent, columns=self.INFO_COLUMNS[1:], padding=(5))
+		self.view = ttk.Frame(parent)
+
+		self.dir_tree = ttk.Treeview(self.view, columns=self.INFO_COLUMNS[1:], padding=(5))
+		self.dir_tree.grid(column=0, row=0, sticky=(N, S, E, W))
 		
-		# Setting column configuration
-		self.view.column("#0", anchor="nw", minwidth=200, stretch=True)
-		self.view.column("#1", anchor="ne", width=70, stretch=False)
-		self.view.column("#2", anchor="center", width=70, stretch=False)
+		self.dir_tree.column("#0", anchor="nw", minwidth=200, stretch=True)
+		self.dir_tree.column("#1", anchor="ne", width=70, stretch=False)
+		self.dir_tree.column("#2", anchor="center", width=70, stretch=False)
 
 		# Setting the headers
-		self.view.heading("#0", text="Name")
+		self.dir_tree.heading("#0", text="Name")
 		for index, column in enumerate(self.INFO_COLUMNS):
-			self.view.heading(f"#{index}", text=column)
-		
-		self.view.bind("<Button-1>", func=(
+			self.dir_tree.heading(f"#{index}", text=column)
+
+		vert_scroll = ttk.Scrollbar(self.view, orient="vertical", command=self.dir_tree.yview)
+		hori_scroll = ttk.Scrollbar(self.view, orient="horizontal", command=self.dir_tree.xview)
+		self.dir_tree.configure(yscrollcommand=vert_scroll.set, xscrollcommand=hori_scroll.set)
+		vert_scroll.grid(column=1, row=0, sticky=(N, S, W), padx=(0, 10))
+		hori_scroll.grid(column=0, row=1, sticky=(N, W, E), pady=(0, 10))
+
+		self.view.rowconfigure(0, weight=1)
+		self.view.columnconfigure(0, weight=1)
+
+		self.dir_tree.bind("<Button-1>", func=(
 				lambda e: 
-				self.select_binding(self.view.identify_row(e.y))
+				self.select_binding(self.dir_tree.identify_row(e.y))
 				if self.get_column(e) == "Selected" 
 				else None
 			)
 		)
 
-		self.view.bind("<<TreeviewSelect>>", func=self.update_last_selection)
+		self.dir_tree.bind("<<TreeviewSelect>>", func=self.update_last_selection)
 
 	def update_last_selection(self, e):
-		self.last_selection = self.view.selection()
+		self.last_selection = self.dir_tree.selection()
 
 	def select_binding(self, uuid: str):
 		self.deselect(uuid) if self.get_current_selection(uuid) == self.SELECTED else self.select(uuid)
 
 	def get_column(self, e: Event):
-		return self.INFO_COLUMNS[int(self.view.identify_column(e.x)[1:])]
+		return self.INFO_COLUMNS[int(self.dir_tree.identify_column(e.x)[1:])]
 
 	def populate(self):
 		if self.directories == []:
-			self.parent.after(10, self.populate)
+			self.view.after(10, self.populate)
 			return
 		
 		if self.directories == None:
 			return
 
-		self.parent.after(1, self.__populate__, 0)
+		self.view.after(1, self.__populate__, 0)
 
 	def add_item(self, path: pathlib.Path, base: bool=False):
 		posixed_path = path.as_posix()
-		if self.view.exists(posixed_path):
+		if self.dir_tree.exists(posixed_path):
 			return
 
 		try:
@@ -113,7 +116,7 @@ class DirectoryView:
 			self.directories.append(posixed_path)
 		text = str(path) if base else path.name
 		parent = "" if base else path.parent.as_posix()
-		self.view.insert(parent, iid=posixed_path, index="end", text=text, values=(self.update_size(path, unit="B"), self.SELECTED))
+		self.dir_tree.insert(parent, iid=posixed_path, index="end", text=text, values=(self.update_size(path, unit="B"), self.SELECTED))
 
 		if path.is_dir():
 			self.__add_children__(path)
@@ -123,8 +126,8 @@ class DirectoryView:
 			self.deselected.clear()
 			return
 		
-		parent = self.view.parent(uuid)
-		self.view.delete(uuid)
+		parent = self.dir_tree.parent(uuid)
+		self.dir_tree.delete(uuid)
 		self.removed.add(uuid)
 
 		if uuid in self.directories:
@@ -177,16 +180,16 @@ class DirectoryView:
 
 	def __edit_selection__(self, uuid: str, select: bool):
 		new_symbol = self.SELECTED if select else self.NOT_SELECTED
-		self.view.set(uuid, column="Selected", value=new_symbol)
+		self.dir_tree.set(uuid, column="Selected", value=new_symbol)
 		self.__edit_child_selection__(uuid, select)
 
-		parent_id = self.view.parent(uuid)
+		parent_id = self.dir_tree.parent(uuid)
 		self.view.after(10, self.__edit_parent_selection__, parent_id)
 
 	
 	def __edit_parent_selection__(self, uuid: str):
 		original_selection = self.get_current_selection(uuid)
-		children = self.view.get_children(uuid)
+		children = self.dir_tree.get_children(uuid)
 		all_selected = all (
 			map (
 				lambda c: self.get_current_selection(c) == self.SELECTED,
@@ -195,14 +198,14 @@ class DirectoryView:
 		)
 
 		new_selection = self.SELECTED if all_selected else self.NOT_SELECTED
-		self.view.set(uuid, column="Selected", value=new_selection)
+		self.dir_tree.set(uuid, column="Selected", value=new_selection)
 
 		if original_selection == new_selection or uuid == "":
 			self.view.after(10, self.__compute_deselected__, "")
 		else:
 			self.view.after(
 				10, self.__edit_parent_selection__, 
-				self.view.parent(uuid),
+				self.dir_tree.parent(uuid),
 			)
 
 		return
@@ -228,16 +231,16 @@ class DirectoryView:
 		elif not all_deselected:
 			self.remove_from_deselect(root)
 			# Compute deselected of children
-			for child in self.view.get_children(root):
+			for child in self.dir_tree.get_children(root):
 				self.view.after(10, self.__compute_deselected__, child)
 
 		return
 
 	def get_all_children(self, root: str):
-		children: list = list(self.view.get_children(root))
+		children: list = list(self.dir_tree.get_children(root))
 
 		for child in children:
-			children.extend(self.view.get_children(child))
+			children.extend(self.dir_tree.get_children(child))
 
 		return children
 
@@ -246,12 +249,12 @@ class DirectoryView:
 		children = self.get_all_children(uuid)
 
 		# Converted to list so that map is evaluated as map uses lazy evaluation
-		list(map(lambda c: self.view.set(c, column="Selected", value=new_symbol), children))
+		list(map(lambda c: self.dir_tree.set(c, column="Selected", value=new_symbol), children))
 		
 		return
 
 	def get_current_selection(self, uuid: str):
-		return self.view.set(uuid, column="Selected")
+		return self.dir_tree.set(uuid, column="Selected")
 
 	def __populate__(self, index):
 		try:
@@ -263,7 +266,7 @@ class DirectoryView:
 
 		if not path.exists():
 			self.directories.remove(directory)
-			self.parent.after(10, self.__populate__, index)
+			self.view.after(10, self.__populate__, index)
 			return
 	
 		# Add base node with children if directory
@@ -274,7 +277,7 @@ class DirectoryView:
 				message="What did you give me? How is {path} somehow not a file or directory? I'm confused"
 			)
 
-		self.parent.after(10, self.__populate__, index+1)
+		self.view.after(10, self.__populate__, index+1)
 
 	def __add_children__(self, path: pathlib.Path):
 		path_sep = "\\" if platform.system() == "Windows" else "/"
@@ -287,6 +290,6 @@ class DirectoryView:
 		children = dirnames + filenames
 		for child in children:
 			child_p = pathlib.Path(f"{dirpath}{path_sep}{child}")
-			self.parent.after(10, self.add_item, child_p)
+			self.view.after(10, self.add_item, child_p)
 
 		return
