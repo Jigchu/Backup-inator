@@ -9,8 +9,10 @@ delimited messages are not thread-safe
 
 import socket
 from typing import Literal
+from threading import Lock
 
-PREV_CHUNK = b""	#TODO: make this thread-safe
+PREV_CHUNK: dict[str, str] = {}
+DELIM_LOCK = Lock()
 
 def send(sock: socket.socket, msg: str, type: Literal["delim", "prefix", None]=None):
 	msg = msg.encode("utf-8")
@@ -46,9 +48,18 @@ def recv(sock: socket.socket, bufsize: int):
 	return msg
 
 # A recieve function that uses delimiters to indicate end of message
-def recv_delim(sock: socket.socket):
+def recv_delim(sock: socket.socket, ip: str):
 	global PREV_CHUNK
-	msg_chunks = [PREV_CHUNK]
+	DELIM_LOCK.acquire()
+	prev_chunk = PREV_CHUNK.get(ip)
+	if prev_chunk != b"":
+		PREV_CHUNK[ip] = b""
+	DELIM_LOCK.release()
+
+	msg_chunks = []
+	if prev_chunk not in [None, b""]:
+		msg_chunks.append(prev_chunk)
+
 	delim = False
 	while not delim:
 		chunk = sock.recv(4096)
@@ -57,7 +68,9 @@ def recv_delim(sock: socket.socket):
 		for index, letter in enumerate(chunk):
 			if letter == 0:
 				delim = True
-				PREV_CHUNK = chunk[index+1:]
+				DELIM_LOCK.acquire()
+				PREV_CHUNK[ip] = chunk[index+1:]
+				DELIM_LOCK.release()
 				chunk = chunk[:index]
 				break
 		msg_chunks.append(chunk)

@@ -21,7 +21,7 @@ def main():
 				msg = load_backup_conf()
 				sio.send(client, msg, type="delim")
 			case "UpdateBackupConf":
-				update_backup_conf(client)
+				update_backup_conf(client, client_address[0])
 		
 		client.shutdown(socket.SHUT_RDWR)
 		client.close()
@@ -30,20 +30,20 @@ def main():
 
 def load_backup_conf():
 	try:
-		backup_json = open("backup.json")
+		backup_json = open("backup.json", mode="r")
 	except FileNotFoundError:
 		backup_json = open("backup.json", mode="x")
 	finally:
 		backup_json.close()
 
 	backup_conf = ""
-	with open("backup.json") as backup_json:
+	with open("backup.json", mode="r") as backup_json:
 		backup_conf = "".join([line for line in backup_json])
 
 	return backup_conf
 
-def update_backup_conf(client: socket.socket):
-	json_string = sio.recv_delim(client)
+def update_backup_conf(client: socket.socket, client_ip: str):
+	json_string = sio.recv_delim(client, client_ip)
 	backup_conf = json.loads(json_string)
 
 	with open("backup.json", mode="w") as backup_json:

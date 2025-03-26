@@ -15,7 +15,7 @@ from DirectoryView import DirectoryView
 from RsyncTracker import RsyncTracker
 
 class BackupWindow:
-	def __init__(self, parent):
+	def __init__(self, parent, menubar: Menu):
 		self.last_modified = ""
 		self.mainframe = ttk.Frame(parent, padding="5 10")
 		self.mainframe.grid(column=0, row=0, sticky=(N, S, E, W))
@@ -23,11 +23,11 @@ class BackupWindow:
 		self.dir_view = DirectoryView(self.mainframe)
 		self.dir_view.view.grid(column=0, row=0, columnspan=2, rowspan=6, sticky=(N, S, E, W), padx=5, pady=3)
 
-		add_button = ttk.Button(self.mainframe, text="Add Folder", command=self.add_dir)
-		add_button.grid(column=2, row=0, sticky=(N, E), padx=5, pady=(5, 3))
+		add_dir_button = ttk.Button(self.mainframe, text="Add Folder", command=self.add_dir)
+		add_dir_button.grid(column=2, row=0, sticky=(N, E), padx=5, pady=(5, 3))
 
-		add_button = ttk.Button(self.mainframe, text="Add File", command=self.add_file)
-		add_button.grid(column=2, row=1, sticky=(N, E), padx=5, pady=(5, 3))
+		add_file_button = ttk.Button(self.mainframe, text="Add File", command=self.add_file)
+		add_file_button.grid(column=2, row=1, sticky=(N, E), padx=5, pady=(5, 3))
 
 		remove_button = ttk.Button(self.mainframe, text="Remove", command=self.remove_item)
 		remove_button.grid(column=2, row=2, sticky=(N, E), padx=5, pady=3)
@@ -41,11 +41,22 @@ class BackupWindow:
 		backup_button = ttk.Button(self.mainframe, text="Backup", command=self.backup)
 		backup_button.grid(column=1, row=6, sticky=(N, W, E), padx=5, pady=(3, 5))
 
+		self.buttons = {
+			"AddFile": add_file_button,
+			"AddDir": add_dir_button,
+			"SelectAll": select_button,
+			"DeselectAll": deselect_button,
+			"Backup": backup_button,
+		}
+
 		# Setting up the treeview's fit to window
 		self.mainframe.columnconfigure(0, weight=1)
 		self.mainframe.rowconfigure(5, weight=1)
 
 		self.dir_view.view.bind("<<DeselectedUpdate>>", lambda _: self.save_backup_conf())
+
+		self.menubar = menubar
+		self.populate_menubar()
 
 		# Populate dir_view with backup directories
 		executor = concurrent.futures.ThreadPoolExecutor()
@@ -54,7 +65,10 @@ class BackupWindow:
 		self.dir_view.view.after(100, self.dir_view.populate)
 
 		# Kickstart the backup.json autoupdater
-		self.mainframe.after(10, self.update_remote_backup_conf, globals.UPDATE_INTERVAL, datetime.datetime.now())
+		self.mainframe.after(10, self.update_remote_backup_conf, datetime.datetime.now())
+
+	def populate_menubar(self):
+		raise NotImplementedError
 
 	def load_backup_conf(self):
 		remote_backup_conf = self.get_remote_backup_conf()
@@ -79,7 +93,7 @@ class BackupWindow:
 		client.settimeout(globals.TIMEOUT_LENGTH)
 		client.connect((globals.HOST, globals.port))
 		sio.send(client, "RequestBackupConf", type="delim")
-		backup_conf_string = sio.recv_delim(client)
+		backup_conf_string = sio.recv_delim(client, globals.HOST)
 		client.shutdown(socket.SHUT_RDWR)
 		client.close()
 
@@ -90,13 +104,13 @@ class BackupWindow:
 
 	def get_local_backup_conf(self):
 		try:
-			backup_json = open("backup.json")
+			backup_json = open("backup.json", mode="r")
 		except FileNotFoundError:
 			backup_json = open("backup.json", mode="x")
 		finally:
 			backup_json.close()
 
-		backup_json = open("backup.json")
+		backup_json = open("backup.json", mode="r")
 		try:
 			backup_conf: dict = json.load(backup_json)
 		except json.JSONDecodeError:
@@ -120,11 +134,12 @@ class BackupWindow:
 		return
 
 	# Interval is in minutes
-	def update_remote_backup_conf(self, INTERVAL: float, last_update_time: datetime.datetime):
+	def update_remote_backup_conf(self, last_update_time: datetime.datetime):
+		INTERVAL = globals.settings.get("RemoteUpdateInterval") or 5
 		now = datetime.datetime.now()
 		time_since_last_update = now - last_update_time
 		if time_since_last_update < datetime.timedelta(minutes=INTERVAL):
-			self.mainframe.after(10, self.update_remote_backup_conf, INTERVAL, last_update_time)
+			self.mainframe.after(10, self.update_remote_backup_conf, last_update_time)
 			return
 
 		executor = concurrent.futures.ThreadPoolExecutor()
@@ -132,7 +147,7 @@ class BackupWindow:
 		self.mainframe.after(10, tools.non_blocking_executor_shutdown, self.mainframe, executor, future)
 
 		# If updated start another countdown but with the current time as the last updated time
-		self.mainframe.after(10, self.update_remote_backup_conf, INTERVAL, now)
+		self.mainframe.after(10, self.update_remote_backup_conf, now)
 
 		return
 
@@ -155,7 +170,6 @@ class BackupWindow:
 
 		return
 
-	# TODO: Make sure it updates the server about these changes
 	def add_dir(self):
 		"""
 		The reason why the title of dialogs can use platform specific terminology
@@ -200,6 +214,8 @@ class BackupWindow:
 		self.dir_view.deselect("")
 
 	def backup(self):
+		self.buttons["Backup"].state("disabled")
+
 		include_file = self.__create_files_from_file__()
 		exclude_file = self.__create_exclude_file__()
 		
@@ -208,10 +224,11 @@ class BackupWindow:
 			exclude_file = tools.win_to_rsync_readable_posix(exclude_file)
 		
 		rsync_path = shutil.which("rsync")
-		rsync_user = globals.SERVER_USER
+		rsync_user = globals.settings.get("ServerUser") or "user"
 		
 		out_format = "| %f | %b"
-		ssh_command = f"ssh -p {globals.SSH_PORT}"
+		ssh_port = globals.settings.get("SSHPort") or 22
+		ssh_command = f"ssh -p {ssh_port}"
 		rsync_command = [
 			rsync_path, "-e", ssh_command, "--archive", "--recursive", "--no-relative", "--compress",
 			"--partial", f"--exclude-from={exclude_file}", f"--files-from={include_file}",
@@ -235,6 +252,7 @@ class BackupWindow:
 		pathlib.Path("FilesFrom.tmp").resolve().unlink()
 		e.widget.destroy()
 		
+		self.buttons["Backup"].state("!disabled")
 		return
 
 	def __create_files_from_file__(self):

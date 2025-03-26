@@ -16,11 +16,9 @@ class ClientWindow:
 		self.root.rowconfigure(index=0, weight=1)
 
 		menubar = Menu(self.root)
-		file_menu = Menu(menubar)
-		menubar.add_cascade(menu=file_menu, label="File", underline=0)
 		self.root["menu"] = menubar
 
-		self.backup_win = BackupWindow(self.root)
+		self.backup_win = BackupWindow(self.root, menubar)
 		
 		if globals.HOST == "socket.gaierror":
 			messagebox.showerror(

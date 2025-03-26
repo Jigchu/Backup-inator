@@ -8,22 +8,24 @@ import socket
 settings: dict = {}
 HOST: str = ""
 port: int = -1
-
-# TODO: Puts these into settings.json
-UPDATE_INTERVAL = 5.0
-SSH_PORT = 22
 TIMEOUT_LENGTH = 300
-SERVER_USER = "user"
 
 def load():
-	global settings, HOST, port
-	# TODO: Preset timoutlength setting when not present
-	# Load the settings using JSON because why not
+	global settings, HOST, port, TIMEOUT_LENGTH
+	
 	settings = {}
-	# TODO: Check if the settings json even exists
+
+	try:
+		settings_file = open("settings.json", mode="r")
+	except FileNotFoundError:
+		settings_file = open("settings.json", mode="x")
+	finally:
+		settings_file.close()
+
 	with open("settings.json", mode="r") as settings_file:
 		settings = json.load(settings_file)
 
+	TIMEOUT_LENGTH = settings.get("TimeoutLength") or 300
 	port = settings.get("port") or 9999
 
 	if settings.get("UseHostname"):
