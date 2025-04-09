@@ -68,7 +68,41 @@ class BackupWindow:
 		self.mainframe.after(10, self.update_remote_backup_conf, datetime.datetime.now())
 
 	def populate_menubar(self):
-		raise NotImplementedError
+		file_menu = Menu(self.menubar)
+		file_menu.add_command(label="Add Folder", command=self.add_dir)
+		file_menu.add_command(label="Add File", command=self.add_file)
+		file_menu.add_separator()
+
+		import_menu = Menu(file_menu)
+		import_menu.add_command(label="Backup.json")
+		import_menu.add_command(label="Settings.json")
+
+		export_menu = Menu(file_menu)
+		export_menu.add_command(label="Backup.json")
+		export_menu.add_command(label="Settings.json")
+
+		file_menu.add_cascade(menu=import_menu, label="Import...")
+		file_menu.add_cascade(menu=export_menu, label="Export...")
+
+		edit_menu = Menu(self.menubar)
+		edit_menu.add_command(label="Remove", command=self.remove_item)
+		edit_menu.add_command(label="Select All", command=self.select_all)
+		edit_menu.add_command(label="Deselect All", command=self.deselect_all)
+		edit_menu.add_command(label="Edit Host Details")
+		edit_menu.add_command(label="Edit Preferences")
+
+		view_menu = Menu(self.menubar)
+		view_menu.add_command(label="Fullscreen")
+
+		backup_menu = Menu(self.menubar)
+		backup_menu.add_command(label="Backup", command=self.backup)
+		backup_menu.add_command(label="Backup All")
+		backup_menu.add_command(label="Backup From...")
+
+		self.menubar.add_cascade(menu=file_menu, label="File")
+		self.menubar.add_cascade(menu=edit_menu, label="Edit")
+		self.menubar.add_cascade(menu=view_menu, label="View")
+		self.menubar.add_cascade(menu=backup_menu, label="Backup")
 
 	def load_backup_conf(self):
 		remote_backup_conf = self.get_remote_backup_conf()
@@ -214,7 +248,7 @@ class BackupWindow:
 		self.dir_view.deselect("")
 
 	def backup(self):
-		self.buttons["Backup"].state("disabled")
+		self.buttons["Backup"].state(["disabled"])
 
 		include_file = self.__create_files_from_file__()
 		exclude_file = self.__create_exclude_file__()
@@ -252,7 +286,7 @@ class BackupWindow:
 		pathlib.Path("FilesFrom.tmp").resolve().unlink()
 		e.widget.destroy()
 		
-		self.buttons["Backup"].state("!disabled")
+		self.buttons["Backup"].state(["!disabled"])
 		return
 
 	def __create_files_from_file__(self):
