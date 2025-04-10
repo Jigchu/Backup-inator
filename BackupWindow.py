@@ -91,17 +91,13 @@ class BackupWindow:
 		edit_menu.add_command(label="Edit Host Details")
 		edit_menu.add_command(label="Edit Preferences")
 
-		view_menu = Menu(self.menubar)
-		view_menu.add_command(label="Fullscreen")
-
 		backup_menu = Menu(self.menubar)
 		backup_menu.add_command(label="Backup", command=self.backup)
-		backup_menu.add_command(label="Backup All")
-		backup_menu.add_command(label="Backup From...")
+		backup_menu.add_command(label="Backup All", command=self.backup_all)
+		backup_menu.add_command(label="Backup From...", command=self.backup_from)
 
 		self.menubar.add_cascade(menu=file_menu, label="File")
 		self.menubar.add_cascade(menu=edit_menu, label="Edit")
-		self.menubar.add_cascade(menu=view_menu, label="View")
 		self.menubar.add_cascade(menu=backup_menu, label="Backup")
 
 	def load_backup_conf(self):
@@ -221,6 +217,7 @@ class BackupWindow:
 
 		if dir == "":
 			return
+		
 		self.dir_view.add_item(pathlib.Path(dir), base=True)
 		self.save_backup_conf()
 
@@ -232,6 +229,7 @@ class BackupWindow:
 
 		if filename == "":
 			return
+		
 		self.dir_view.add_item(pathlib.Path(filename), base=True)
 		self.save_backup_conf()
 
@@ -248,10 +246,39 @@ class BackupWindow:
 		self.dir_view.deselect("")
 
 	def backup(self):
+		include_dirs = self.dir_view.directories.copy()
+		
+		exclude_dirs = []
+		exclude_dirs.extend(self.dir_view.deselected.copy())
+		exclude_dirs.extend(self.dir_view.removed.copy())
+
+		self.__backup__(include_dirs=include_dirs, exclude_dirs=exclude_dirs)
+
+	def backup_all(self):
+		include_dirs = self.dir_view.directories.copy()
+		self.__backup__(include_dirs=include_dirs, exclude_dirs=[])
+	
+	def backup_from(self):
+		terminology = "Folder" if platform.system == "Windows" else "Directory"
+		dir = filedialog.askdirectory(
+			parent=self.mainframe,
+			title=f"Add {terminology}",
+			mustexist=True
+		)
+
+		if dir == "":
+			return
+		
+		dir = pathlib.Path(dir)
+
+		self.__backup__(include_dirs=[dir.as_posix()], exclude_dirs=[])
+
+	def __backup__(self, include_dirs: list[str], exclude_dirs: list[str]):
+		self.menubar.entryconfigure("Backup", state=DISABLED)
 		self.buttons["Backup"].state(["disabled"])
 
-		include_file = self.__create_files_from_file__()
-		exclude_file = self.__create_exclude_file__()
+		include_file = self.__create_files_from_file__(include_dirs)
+		exclude_file = self.__create_exclude_file__(exclude_dirs)
 		
 		if platform.system() == "Windows":
 			include_file = tools.win_to_rsync_readable_posix(include_file)
@@ -268,30 +295,26 @@ class BackupWindow:
 			"--partial", f"--exclude-from={exclude_file}", f"--files-from={include_file}",
 			f'--out-format={out_format}', "/", f"{rsync_user}@{globals.HOST}:~/Backup/"
 		]
-
-		# Remove later
-		DEBUG = False
-		if DEBUG:
-			rsync_command.insert(4, "--dry-run")
 		
-		total_to_backup = self.total_files_to_backup()
+		total_to_backup = self.total_files_to_backup(include_dirs, exclude_dirs)
 		rsync_progress = RsyncTracker(
 			self.mainframe, rsync_command=rsync_command, total_to_backup=total_to_backup
 		)
 
-		rsync_progress.window.bind("<<RsyncCompleted>>", lambda e: self.end_backup(e))
-	
-	def end_backup(self, e: Event):
+		rsync_progress.window.bind("<<RsyncCompleted>>", lambda e: self.__end_backup__(e))
+
+		return
+
+	def __end_backup__(self, e: Event):
 		pathlib.Path("ExcludeFrom.tmp").resolve().unlink()
 		pathlib.Path("FilesFrom.tmp").resolve().unlink()
 		e.widget.destroy()
 		
+		self.menubar.entryconfigure("Backup", state=NORMAL)
 		self.buttons["Backup"].state(["!disabled"])
 		return
 
-	def __create_files_from_file__(self):
-		include_dirs = self.dir_view.directories.copy()
-
+	def __create_files_from_file__(self, include_dirs: list[str]):
 		if platform.system() == "Windows":
 			include_dirs = list(map(tools.win_to_rsync_readable_posix, map(pathlib.Path, include_dirs)))
 
@@ -305,11 +328,7 @@ class BackupWindow:
 
 		return pathlib.Path("FilesFrom.tmp").resolve()
 	
-	def __create_exclude_file__(self):
-		exclude_dirs = []
-		exclude_dirs.extend(self.dir_view.deselected.copy())
-		exclude_dirs.extend(self.dir_view.removed.copy())
-
+	def __create_exclude_file__(self, exclude_dirs: list[str]):
 		if platform.system() == "Windows":
 			exclude_dirs = list(map(tools.win_to_rsync_readable_posix, map(pathlib.Path, exclude_dirs)))
 		
@@ -323,15 +342,13 @@ class BackupWindow:
 
 		return pathlib.Path("ExcludeFrom.tmp").resolve()
 	
-	def total_files_to_backup(self):
-		total_include = map(pathlib.Path, self.dir_view.directories)
+	def total_files_to_backup(self, include_dirs: list[str], exclude_dirs: list[str]):
+		total_include = map(pathlib.Path, include_dirs)
 		total_include = sum(
 			map(tools.how_many_files_in, total_include)
 		)
 
-		total_exclude = list(self.dir_view.removed)
-		total_exclude.extend(self.dir_view.deselected)
-		total_exclude = map(pathlib.Path, total_exclude)
+		total_exclude = map(pathlib.Path, exclude_dirs)
 		total_exclude = sum(
 			map(tools.how_many_files_in, total_exclude)
 		)
