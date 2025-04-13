@@ -8,7 +8,7 @@ import socket
 from tkinter import *
 from tkinter import ttk, filedialog, messagebox
 
-import runtime_globals as globals
+import settings
 import misc_tools as tools
 import socket_io as sio
 from DirectoryView import DirectoryView
@@ -120,10 +120,10 @@ class BackupWindow:
 	
 	def get_remote_backup_conf(self):
 		client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-		client.settimeout(globals.TIMEOUT_LENGTH)
-		client.connect((globals.HOST, globals.port))
+		client.settimeout(settings.settings["TimeoutLength"])
+		client.connect((settings.settings["Host"], settings.settings["Port"]))
 		sio.send(client, "RequestBackupConf", type="delim")
-		backup_conf_string = sio.recv_delim(client, globals.HOST)
+		backup_conf_string = sio.recv_delim(client, settings.settings["Host"])
 		client.shutdown(socket.SHUT_RDWR)
 		client.close()
 
@@ -165,7 +165,7 @@ class BackupWindow:
 
 	# Interval is in minutes
 	def update_remote_backup_conf(self, last_update_time: datetime.datetime):
-		INTERVAL = globals.settings.get("RemoteUpdateInterval") or 5
+		INTERVAL = settings.settings["RemoteUpdateInterval"]
 		now = datetime.datetime.now()
 		time_since_last_update = now - last_update_time
 		if time_since_last_update < datetime.timedelta(minutes=INTERVAL):
@@ -191,8 +191,8 @@ class BackupWindow:
 		json_string = json.dumps(json_contents)
 
 		client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-		client.settimeout(globals.TIMEOUT_LENGTH)
-		client.connect((globals.HOST, globals.port))
+		client.settimeout(settings.settings["TimeoutLength"])
+		client.connect((settings.settings["Host"], settings.settings["Port"]))
 		sio.send(client, "UpdateBackupConf", type="delim")
 		sio.send(client, json_string, type="delim")
 		client.shutdown(socket.SHUT_RDWR)
@@ -285,20 +285,20 @@ class BackupWindow:
 			exclude_file = tools.win_to_rsync_readable_posix(exclude_file)
 		
 		rsync_path = shutil.which("rsync")
-		rsync_user = globals.settings.get("ServerUser") or "user"
+		rsync_user = settings.settings.get("ServerUser") or "user"
 		
 		out_format = "| %f | %b"
-		ssh_port = globals.settings.get("SSHPort") or 22
+		ssh_port = settings.settings["SSHPort"]
 		ssh_command = f"ssh -p {ssh_port}"
 		rsync_command = [
-			rsync_path, "-e", ssh_command, "--archive", "--recursive", "--no-relative", "--compress",
+			rsync_path, "-e", ssh_command, "--archive", "--recursive", "--compress",
 			"--partial", f"--exclude-from={exclude_file}", f"--files-from={include_file}",
-			f'--out-format={out_format}', "/", f"{rsync_user}@{globals.HOST}:~/Backup/"
+			f'--out-format={out_format}', "/", f"{rsync_user}@{settings.settings["Host"]}:~/Backup/"
 		]
 		
 		total_to_backup = self.total_files_to_backup(include_dirs, exclude_dirs)
 		rsync_progress = RsyncTracker(
-			self.mainframe, rsync_command=rsync_command, total_to_backup=total_to_backup
+			self.mainframe, HOST=settings.settings["Host"], rsync_command=rsync_command, total_to_backup=total_to_backup
 		)
 
 		rsync_progress.window.bind("<<RsyncCompleted>>", lambda e: self.__end_backup__(e))

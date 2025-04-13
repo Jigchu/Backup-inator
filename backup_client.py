@@ -2,7 +2,7 @@ from tkinter import *
 from tkinter import messagebox
 
 from BackupWindow import BackupWindow
-import runtime_globals as globals
+import settings
 
 class ClientWindow:
 	def __init__(self):
@@ -19,8 +19,7 @@ class ClientWindow:
 		self.root["menu"] = menubar
 
 		self.backup_win = BackupWindow(self.root, menubar)
-		
-		if globals.HOST == "socket.gaierror":
+		if settings.settings["Host"] == "socket.gaierror":
 			messagebox.showerror(
 				title="getaddrinfo failed",
 				message="Failed to get the server's IP",
@@ -33,7 +32,7 @@ class ClientWindow:
 		self.root.mainloop()
 
 def main():
-	globals.load()
+	settings.load()
 	client_win = ClientWindow()
 	client_win.run()
 

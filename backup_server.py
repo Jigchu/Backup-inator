@@ -14,7 +14,7 @@ def main():
 
 	while True:
 		client, client_address = server.accept()
-		command = sio.recv_delim(client)
+		command = sio.recv_delim(client, client_address)
 
 		match command:
 			case "RequestBackupConf":

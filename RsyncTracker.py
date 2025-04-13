@@ -8,12 +8,12 @@ from tkinter import *
 from tkinter import ttk, messagebox
 
 import misc_tools as tools
-import runtime_globals as globals
 
 class RsyncTracker:
-	def __init__(self, parent: Widget, rsync_command: list[str], total_to_backup: int):
+	def __init__(self, parent: Widget, HOST: str, rsync_command: list[str], total_to_backup: int):
 		self.total_to_backup = total_to_backup
 		self.rsync_command = rsync_command
+		self.HOST = HOST
 		
 		self.window = Toplevel(parent)
 		self.window.resizable(width=False, height=False)
@@ -56,7 +56,7 @@ class RsyncTracker:
 		self.window.withdraw()
 		messagebox.showinfo(
 			title="Backup Completed",
-			message=f"Successfully backed up files to {globals.HOST}"
+			message=f"Successfully backed up files to {self.HOST}"
 		)
 		self.window.event_generate("<<RsyncCompleted>>")
 

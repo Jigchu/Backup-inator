@@ -38,8 +38,8 @@ class DirectoryView:
 		self.parent = parent
 		self.last_selection = ()
 		self.directories: list[str] = []
-		self.deselected: set[str] = set()
 		self.removed: set[str] = set()
+		self.deselected: set[str] = set()
 		"""
 		UUID will be in self.deselected if:
 		- It is a deselected file 
@@ -83,7 +83,7 @@ class DirectoryView:
 
 		self.dir_tree.bind("<<TreeviewSelect>>", func=self.update_last_selection)
 
-	def update_last_selection(self, e):
+	def update_last_selection(self, e: Event):
 		self.last_selection = self.dir_tree.selection()
 
 	def select_binding(self, uuid: str):
@@ -114,9 +114,11 @@ class DirectoryView:
 
 		if base and posixed_path not in self.directories:
 			self.directories.append(posixed_path)
+
+		SELECTION = self.NOT_SELECTED if posixed_path in self.deselected else self.SELECTED
 		text = str(path) if base else path.name
 		parent = "" if base else path.parent.as_posix()
-		self.dir_tree.insert(parent, iid=posixed_path, index="end", text=text, values=(self.update_size(path, unit="B"), self.SELECTED))
+		self.dir_tree.insert(parent, iid=posixed_path, index="end", text=text, values=(self.update_size(path, unit="B"), SELECTION))
 
 		if path.is_dir():
 			self.__add_children__(path)
