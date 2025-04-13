@@ -1,7 +1,6 @@
 import pathlib
-import platform
 from tkinter import *
-from tkinter import ttk, messagebox
+from tkinter import ttk
 from typing import Literal
 
 import misc_tools as tools
@@ -37,6 +36,7 @@ class DirectoryView:
 	def __init__(self, parent):
 		self.parent = parent
 		self.last_selection = ()
+		self.populating = False
 		self.directories: list[str] = []
 		self.removed: set[str] = set()
 		self.deselected: set[str] = set()
@@ -83,6 +83,9 @@ class DirectoryView:
 
 		self.dir_tree.bind("<<TreeviewSelect>>", func=self.update_last_selection)
 
+	def edit_population_state(self):
+		self.populating = not self.populating
+
 	def update_last_selection(self, e: Event):
 		self.last_selection = self.dir_tree.selection()
 
@@ -90,7 +93,10 @@ class DirectoryView:
 		self.deselect(uuid) if self.get_current_selection(uuid) == self.SELECTED else self.select(uuid)
 
 	def get_column(self, e: Event):
-		return self.INFO_COLUMNS[int(self.dir_tree.identify_column(e.x)[1:])]
+		try:
+			return self.INFO_COLUMNS[int(self.dir_tree.identify_column(e.x)[1:])]
+		except ValueError:
+			return ""
 
 	def populate(self):
 		if self.directories == []:
@@ -100,25 +106,26 @@ class DirectoryView:
 		if self.directories == None:
 			return
 
+		self.populating = True
 		self.view.after(1, self.__populate__, 0)
 
 	def add_item(self, path: pathlib.Path, base: bool=False):
-		posixed_path = path.as_posix()
-		if self.dir_tree.exists(posixed_path):
+		uuid = path.as_posix()
+		if self.dir_tree.exists(uuid):
 			return
 
-		try:
-			self.removed.remove(posixed_path)
-		except KeyError:
-			pass
+		if not self.populating:
+			try:
+				self.removed.remove(uuid)
+			except KeyError:
+				pass
 
-		if base and posixed_path not in self.directories:
-			self.directories.append(posixed_path)
-
-		SELECTION = self.NOT_SELECTED if posixed_path in self.deselected else self.SELECTED
+		if base and uuid not in self.directories:
+			self.directories.append(uuid)
+		
 		text = str(path) if base else path.name
 		parent = "" if base else path.parent.as_posix()
-		self.dir_tree.insert(parent, iid=posixed_path, index="end", text=text, values=(self.update_size(path, unit="B"), SELECTION))
+		self.dir_tree.insert(parent, iid=uuid, index="end", text=text, values=(self.update_size(path, unit="B"), self.SELECTED))
 
 		if path.is_dir():
 			self.__add_children__(path)
@@ -262,6 +269,7 @@ class DirectoryView:
 		try:
 			directory = self.directories[index]
 		except IndexError:
+			self.view.after(10, self.__populate_end_checker__)
 			return
 		
 		path = pathlib.Path(directory)
@@ -273,25 +281,29 @@ class DirectoryView:
 	
 		# Add base node with children if directory
 		self.add_item(path, base=True)
-		if (not path.is_dir() and not path.is_file()):
-			messagebox.showerror(
-				title="Erm",
-				message="What did you give me? How is {path} somehow not a file or directory? I'm confused"
-			)
 
 		self.view.after(10, self.__populate__, index+1)
 
+	def __populate_end_checker__(self):
+		total_files = 0
+		
+		for dir in self.directories:
+			total_files += tools.how_many_files_in(pathlib.Path(dir))
+
+		for dir in self.removed:
+			total_files -= len(tools.how_many_files_in(pathlib.Path(dir)))
+
+		if total_files == len(self.get_all_children("")):
+			self.populating = False
+			for f in self.deselected:
+				self.view.after(10, self.deselect, f)
+			return
+
+		self.view.after(10, self.__populate_end_checker__)
+
 	def __add_children__(self, path: pathlib.Path):
-		path_sep = "\\" if platform.system() == "Windows" else "/"
-		dirpath = ""
-		dirnames = []
-		filenames = []
-		for dirpath, dirnames, filenames in path.walk(follow_symlinks=True):
-			break
+		children = tools.descendants_of(path)
 
-		children = dirnames + filenames
 		for child in children:
-			child_p = pathlib.Path(f"{dirpath}{path_sep}{child}")
-			self.view.after(10, self.add_item, child_p)
-
+			self.view.after(10, self.add_item, child)
 		return

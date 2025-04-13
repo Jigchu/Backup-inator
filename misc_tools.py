@@ -78,12 +78,16 @@ def human_readable_file_size(size: int, unit: Literal["B", "iB"]="B"):
 
 		return f"{prefixed_size} {prefix}{unit}"
 
-# Includes directories and files
+# Get all children files of path
+def descendants_of(path: pathlib.Path):
+	return list(path.glob("**/*"))
+
+# Includes directories and files. Count includes itself
 def how_many_files_in(dir: pathlib.Path):
 	if dir.is_file():
 		return 1
 	
-	return len(list(dir.glob("**/*")))
+	return len(descendants_of(dir))+1
 
 def size_of(file: pathlib.Path):
 		if file.is_dir():
