@@ -302,7 +302,7 @@ class DirectoryView:
 		self.view.after(10, self.__populate_end_checker__)
 
 	def __add_children__(self, path: pathlib.Path):
-		children = tools.descendants_of(path)
+		children = path.glob("./*")
 
 		for child in children:
 			self.view.after(10, self.add_item, child)
