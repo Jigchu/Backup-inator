@@ -291,7 +291,7 @@ class BackupWindow:
 		ssh_port = settings.settings["SSHPort"]
 		ssh_command = f"ssh -p {ssh_port}"
 		rsync_command = [
-			rsync_path, "-e", ssh_command, "--archive", "--recursive", "--compress",
+			rsync_path, "-e", ssh_command, "--archive", "--recursive", "--compress", 
 			"--partial", f"--exclude-from={exclude_file}", f"--files-from={include_file}",
 			f'--out-format={out_format}', "/", f"{rsync_user}@{settings.settings["Host"]}:~/Backup/"
 		]
