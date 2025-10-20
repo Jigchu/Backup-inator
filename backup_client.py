@@ -27,6 +27,21 @@ class ClientWindow:
                 detail="Please check if the server exists",
             )
 
+        if settings.settings["Host"] == "no hostname":
+            messagebox.showerror(
+                title="No hostname in settings",
+                message="No hostname listed in settings",
+                detail="Please enter a hostname into settings",
+            )
+
+        # TODO: Let them type in their username instead of just the error message
+        if settings.settings["Username"] == "no username":
+            messagebox.showerror(
+                title="No username in settings",
+                message="No username listed in settings",
+                detail="Please enter a username into settings",
+            )
+
         # TODO: Check if any setting var is missing and set it up
 
     def run(self):

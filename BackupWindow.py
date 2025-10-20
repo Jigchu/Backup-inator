@@ -7,6 +7,7 @@ import shutil
 import socket
 from tkinter import *
 from tkinter import filedialog, messagebox, ttk
+from typing import cast
 
 import misc_tools as tools
 import settings
@@ -134,7 +135,9 @@ class BackupWindow:
         )
 
         self.last_modified = backup_conf.get("LastModified") or ""
-        self.dir_view.directories = backup_conf.get("BackupDirectories")
+        self.dir_view.directories = cast(
+            list[str], backup_conf.get("BackupDirectories")
+        )
         deselected = backup_conf.get("DeselectedDirectories") or []
         self.dir_view.deselected = set(deselected)
         removed = backup_conf.get("RemovedDirectories") or []
@@ -322,7 +325,7 @@ class BackupWindow:
             f"--files-from={include_file}",
             f"--out-format={out_format}",
             "/",
-            f"{rsync_user}@{settings.settings["Host"]}:~/Backup/",
+            f"{rsync_user}@{settings.settings["Host"]}:~/Backups/",
         ]
 
         total_to_backup = self.total_files_to_backup(include_dirs, exclude_dirs)

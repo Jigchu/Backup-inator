@@ -1,11 +1,11 @@
-import concurrent
 import concurrent.futures
 import datetime
 import pathlib
 import platform
 import subprocess
 from tkinter import *
-from tkinter import ttk, messagebox
+from tkinter import messagebox, ttk
+from typing import IO, cast
 
 import misc_tools as tools
 
@@ -64,6 +64,8 @@ class RsyncTracker:
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
         )
+
+        self.stdout = cast(IO[str], self.process.stdout)
 
         self.poller()
         self.latest_lines = []
@@ -138,7 +140,7 @@ class RsyncTracker:
         )
 
     def __readlines__(self):
-        yield self.process.stdout.readline()
+        yield self.stdout.readline()
 
     def __read_output__(self):
         if not self.running:

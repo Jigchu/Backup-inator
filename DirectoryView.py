@@ -119,7 +119,7 @@ class DirectoryView:
             self.view.after(10, self.populate)
             return
 
-        if self.directories == None:
+        if self.directories is None:
             return
 
         self.populating = True

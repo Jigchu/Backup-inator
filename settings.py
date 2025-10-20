@@ -12,13 +12,14 @@ import socket
 
 settings: dict = {}
 """
-These settings will always be setand can be 
-retrieved by simply using settings["SETTING"]:
-1. Host
-2. Port
-3. TimeoutLength
-4. RemoteUpdateInterval
-5. SSHPort
+These settings will always be set and can be 
+retrieved safely by using settings["SETTING"]:
+1. Username
+2. Host
+3. Port
+4. TimeoutLength
+5. RemoteUpdateInterval
+6. SSHPort
 """
 
 
@@ -35,13 +36,18 @@ def load():
     with open("settings.json", mode="r") as settings_file:
         settings = json.load(settings_file)
 
+    settings["Username"] = settings.get("Username") or "no username"
     settings["Port"] = settings.get("Port") or 9999
     settings["Host"] = settings.get("Host")
     if settings.get("UseHostname"):
+        hostname = settings.get("Hostname")
+        if hostname is None:
+            settings["Host"] = "no hostname"
+            hostname = ""
+
         try:
-            settings["Host"] = socket.gethostbyname(settings.get("Hostname"))
+            settings["Host"] = socket.gethostbyname(hostname)
         except socket.gaierror:
-            print(settings)
             settings["Host"] = "socket.gaierror"
 
     settings["TimeoutLength"] = settings.get("TimeoutLength") or 300
@@ -56,4 +62,3 @@ def save():
         json.dump(settings, settings_file)
 
     return
-
